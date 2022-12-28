@@ -4,7 +4,6 @@ import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "./POWER.sol";
 
 contract TILES is ERC721 {
-
     // ERC20 Info
     POWER power;
     uint256 public constant DAILY_RATE = 1 ether;
@@ -39,6 +38,14 @@ contract TILES is ERC721 {
     uint8 public constant GRID_SIZE = 16;
     mapping(uint8 => mapping(uint8 => uint256)) public getTokenIdFromXY; // x => y => tokenId
 
+    event Minted(uint256 indexed tokenId, address owner, uint8 x, uint8 y);
+    event Moved(uint256 indexed tokenId, uint8 x, uint8 y, address owner, uint8[] moves);
+    event Merged(uint256 tokenId1, uint256 indexed tokenId2, address owner, uint8 x2, uint8 y2, uint8 action);
+    event Claimed(uint256 indexed tokenId, address owner, uint256 award);
+    event PrivilegeSet(uint256 tokenId);
+    event WinnerSet(uint256 tokenId, address controller);
+
+
     constructor(address _erc20) ERC721("Tiles NFT", "TILES") {
         power = POWER(_erc20);
     }
@@ -47,8 +54,8 @@ contract TILES is ERC721 {
                                MINT FUNCTION
     //////////////////////////////////////////////////////////////*/
     /// @notice Mint NFT function
-    function mintNFT() external returns(uint256) {
-        require(tx.origin == msg.sender, "TILES: Only EOA");
+    function mint() public returns(uint256) {
+        // require(tx.origin == msg.sender, "TILES: Only EOA");
         require(minted_amount + 1 <= MAX_SUPPLY, "TILES: all tokens minted");
         require(exist_amount + 1 <= MAX_EXIST, "TILES: max exist");
         minted_amount++;
@@ -59,13 +66,15 @@ contract TILES is ERC721 {
             x: x,
             y: y,
             exponent: 1,
-            privileged: 1,
+            privileged: 0, // 0 is not privileged; 1 is
             tokenId: minted_amount,
             timestamp: block.timestamp
         });
         getTokenIdFromXY[x][y] = minted_amount;
         _safeMint(msg.sender, minted_amount);
         power.burn(msg.sender, MINT_PRICE_ERC20);
+
+        emit Minted(minted_amount, msg.sender, x, y);
         return minted_amount;
     }
 
@@ -96,7 +105,7 @@ contract TILES is ERC721 {
                                MOVE FUNCTION
     //////////////////////////////////////////////////////////////*/
     /// @notice Move Tile NFT on grid; action 0 for left, 1 right, 2 up, 3 down
-    function move(uint8[] calldata moves, uint256 tokenId) external returns (uint8 x, uint8 y) {
+    function move(uint8[] calldata moves, uint256 tokenId) public returns (uint8 x, uint8 y) {
         require(ownerOf(tokenId) == msg.sender, "TILES: not owner");
         x = getTileTrait[tokenId].x;
         y = getTileTrait[tokenId].y;
@@ -107,16 +116,17 @@ contract TILES is ERC721 {
             if (moves[i] == 2) y = moveUp(x, y);
             if (moves[i] == 3) y = moveDown(x, y);
         }
-        if (getTileTrait[tokenId].privileged != 0) power.burn(msg.sender, MOVE_PRICE_ERC20 * moves.length);
+        if (getTileTrait[tokenId].privileged == 0) power.burn(msg.sender, MOVE_PRICE_ERC20 * moves.length);
         getTileTrait[tokenId].x = x;
         getTileTrait[tokenId].y = y;
         getTokenIdFromXY[x][y] = tokenId;
         
+        emit Moved(tokenId, x, y, msg.sender, moves);
     }
 
     // function estimateDestination(uint8[] calldata moves, uint256 tokenId) public view returns (uint8 x, uint8 y) {}
 
-    function moveLeft(uint8 x, uint8 y) private view returns (uint8) {
+    function moveLeft(uint8 x, uint8 y) internal view returns (uint8) {
         require(x != 0, "TILES: leftest");
         for (uint8 i = x; i > 0; i--) {
             if (!checkUnoccupiedXY(i-1,y)) return i;
@@ -124,7 +134,7 @@ contract TILES is ERC721 {
         return 0;
     }
 
-    function moveRight(uint8 x, uint8 y) private view returns (uint8) {
+    function moveRight(uint8 x, uint8 y) internal view returns (uint8) {
         require(x != GRID_SIZE - 1, "TILES: rightest");
         for (uint8 i = x; i < GRID_SIZE - 1; i++) {
             if (!checkUnoccupiedXY(i+1,y)) return i;
@@ -132,7 +142,7 @@ contract TILES is ERC721 {
         return GRID_SIZE-1;
     }
 
-    function moveUp(uint8 x, uint8 y) private view returns (uint8) {
+    function moveUp(uint8 x, uint8 y) internal view returns (uint8) {
         require(y != 0, "TILES: highest");
         for (uint8 j = y; j > 0; j--) {
             if (!checkUnoccupiedXY(x,j-1)) return j;
@@ -140,7 +150,7 @@ contract TILES is ERC721 {
         return 0;
     }
 
-    function moveDown(uint8 x, uint8 y) private view returns (uint8) {
+    function moveDown(uint8 x, uint8 y) internal view returns (uint8) {
         require(y != GRID_SIZE - 1, "TILES: lowest");
         for (uint8 j = y; j < GRID_SIZE - 1; j++) {
             if (!checkUnoccupiedXY(x,j+1)) return j;
@@ -165,27 +175,32 @@ contract TILES is ERC721 {
         if (action == 1) require(x2-x1 == 1 && y1 == y2, "TILES: no adjct right");
         if (action == 2) require(y1-y2 == 1 && x1 == x2, "TILES: no adjct up");
         if (action == 3) require(y2-y1 == 1 && x1 == x2, "TILES: no adjct down");
-        if (getTileTrait[tokenId1].privileged != 0 || getTileTrait[tokenId2].privileged != 0) {
+        if (getTileTrait[tokenId1].privileged == 0 || getTileTrait[tokenId2].privileged == 0) {
             power.burn(msg.sender, MERGE_PRICE_ERC20);
+            getTileTrait[tokenId2].privileged == 0; 
         }
-        getTileTrait[tokenId1].exponent = 0;
+        _burn(tokenId1);
         getTileTrait[tokenId2].exponent++;
         getTokenIdFromXY[x1][y1] = 0;
         exist_amount--;
+
+        emit Merged(tokenId1, tokenId2, msg.sender, x2, y2, action);
     }
 
     /*///////////////////////////////////////////////////////////////
                                CLAIM FUNCTION
     //////////////////////////////////////////////////////////////*/
-    function claim(uint256 tokenId) external returns(uint256 award) {
+    function claim(uint256 tokenId) public returns(uint256 award) {
         require(ownerOf(tokenId) == msg.sender, "TILES: not owner"); // implicitly requires token exist
-        award = getTileTrait[tokenId].exponent * (block.timestamp - getTileTrait[tokenId].timestamp) * DAILY_RATE / 1 days;
-        if (getTileTrait[tokenId].privileged == 0) {
+        award = 2 ** (getTileTrait[tokenId].exponent - 1) * (block.timestamp - getTileTrait[tokenId].timestamp) * DAILY_RATE / 1 days;
+        if (getTileTrait[tokenId].privileged == 1) {
             uint256 bonus_award = (getTileTrait[tokenId].exponent - 1) * (block.timestamp - getTileTrait[tokenId].timestamp) * BONUS_RATE / 1 days * 2 / 3; 
             award = award + bonus_award;
         }
         getTileTrait[tokenId].timestamp = block.timestamp;
         power.mint(msg.sender, award);
+
+        emit Claimed(tokenId, msg.sender, award);
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -198,23 +213,27 @@ contract TILES is ERC721 {
                                PRIVILEGE FUNCTION
     //////////////////////////////////////////////////////////////*/
     /// @notice Award privilege to tokenId if sender has power; does not require ownerOf
-    function awardPrivilege(uint256 tokenId) public {
-        require(getTileTrait[tokenId].privileged == 1, "TILES: already privileged");
+    function setPrivilege(uint256 tokenId) public {
+        require(getTileTrait[tokenId].privileged == 0, "TILES: already privileged");
         // can change cost to eth, or lp
-        power.burn(msg.sender, PRIVILEGE_PRICE_ERC20 * getTileTrait[tokenId].exponent);
-        getTileTrait[tokenId].privileged = 0;
+        power.burn(msg.sender, PRIVILEGE_PRICE_ERC20 * 2 ** (getTileTrait[tokenId].exponent - 1));
+        getTileTrait[tokenId].privileged = 1;
+
+        emit PrivilegeSet(tokenId);
     }
 
     /*///////////////////////////////////////////////////////////////
                                WINNER FUNCTION
     //////////////////////////////////////////////////////////////*/
     /// @notice Award winner certain rights when winning condition is met
-    function awardWinner(uint256 tokenId, address _controller) public {
+    function setWinner(uint256 tokenId, address _controller) public {
         require(ownerOf(tokenId) == msg.sender, "TILES: not owner");
         require(getTileTrait[tokenId].exponent >= WINNING_EXPONENT, "TILES: not winner");
         require(won == false, "TILES: already won");
         won = true;
         power.changeController(_controller);
+
+        emit WinnerSet(tokenId, _controller);
     }
 
 }

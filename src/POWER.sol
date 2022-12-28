@@ -6,11 +6,13 @@ import "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 
 contract POWER is ERC20 {
-
     // uint256 constant MAX_SUPPLY = 1000000 ether;
 
     address public controller;
-    
+
+    event ControllerAdded(address controller);
+    event ControllerChanged(address controller);
+
     constructor() ERC20("Power", "POWER") {
         _mint(msg.sender, 50 ether); // mint the initial amount to setup liquidity
     }
@@ -32,12 +34,16 @@ contract POWER is ERC20 {
     function addController(address _tiles) external {
         require(controller == address(0), "POWER: controller is set");
         controller = _tiles;
+
+        emit ControllerAdded(_tiles);
     }
 
     /// @notice change a new controller who has the ability to burn and mint
     function changeController(address _controller) external {
         require(msg.sender == controller, "POWER: only controller can change");
         controller = _controller;
+
+        emit ControllerChanged(_controller);
     }
 
     /// @notice only new controller, i.e., winner, may transfer an erc20 this contract owns
