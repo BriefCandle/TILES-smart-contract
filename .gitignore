@@ -1,0 +1,6 @@
+broadcast/
+cache/
+out/
+wallets/
+lib/
+.env
