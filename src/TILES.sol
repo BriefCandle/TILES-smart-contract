@@ -1,9 +1,13 @@
 pragma solidity ^0.8.13;
 import "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+import "lib/openzeppelin-contracts/contracts/utils/Strings.sol";
+import "lib/openzeppelin-contracts/contracts/utils/Base64.sol";
 import "./POWER.sol";
 
 contract TILES is ERC721 {
+    using Strings for uint256;
+
     // ERC20 Info
     POWER power;
     uint256 public constant DAILY_RATE = 1 ether;
@@ -17,18 +21,22 @@ contract TILES is ERC721 {
     uint256 public constant MAX_SUPPLY = 2**14; // 16384
     uint256 public minted_amount;
 
+    // SVG Info
+    string[12] public TILE_COLOR = ['#000000', '#EEE4DA', '#EDE0C8', '#F2B179', '#F59563', '#F67C5F', '#F65E3B', '#EDCF72', '#EDCC61', '#EDC850','#EDC53F','#EDC22E'];
+
+
     // Winning Info
     uint8 public constant WINNING_EXPONENT = 11; // 2048
     bool public won = false;
 
     // Tile Info
-    uint256 public constant MAX_EXIST = GRID_SIZE / 2 * GRID_SIZE;
+    uint256 public constant MAX_EXIST = uint256(GRID_SIZE)**2 / 2;
     uint256 public exist_amount;
     struct TileTrait {
         uint8 x;
         uint8 y;
         uint8 exponent;
-        uint8 privileged;
+        uint8 privileged; // 0 is not privileged; 1 is
         uint256 tokenId;
         uint256 timestamp;
     }
@@ -66,7 +74,7 @@ contract TILES is ERC721 {
             x: x,
             y: y,
             exponent: 1,
-            privileged: 0, // 0 is not privileged; 1 is
+            privileged: 0, 
             tokenId: minted_amount,
             timestamp: block.timestamp
         });
@@ -206,6 +214,56 @@ contract TILES is ERC721 {
     /*///////////////////////////////////////////////////////////////
                                TOKEN URI FUNCTION
     //////////////////////////////////////////////////////////////*/
+    /// @notice Base64 encoded metadata
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        bytes memory dataURI = abi.encodePacked(
+            '{',
+                '"name": "TILE #', tokenId.toString(), '", ',
+                '"description": "A 2048-style tile-grid game. Owner of the first 2048 tile may control the project contract.", ',
+                '"image": "data:image/svg+xml;base64,', Base64.encode(compileSVG(tokenId)),'", ',
+                compileAttributes(tokenId),
+            '}'
+        );
+        return string(abi.encodePacked(
+            "data:application/json;base64,",
+            Base64.encode(dataURI)
+        ));
+    }
+
+    /// @notice Attributes in string
+    function compileAttributes(uint256 tokenId) public view returns (string memory) {
+        TileTrait memory trait = getTileTrait[tokenId];
+        return string.concat(
+            '"attributes":','[',
+                '{"trait_type": "x", "value": "', uint256(trait.x).toString(), '"},', 
+                '{"trait_type": "y", "value": "', uint256(trait.y).toString(), '"},',
+                '{"trait_type": "exponent", "value": "', uint256(trait.exponent).toString(), '"},',
+                '{"trait_type": "privileged", "value": "', trait.privileged == 0 ? 'false':'true', '"},',
+                '{"trait_type": "timestamp", "value": "', trait.timestamp.toString(), '"}',
+            ']'
+        );
+    }
+
+    /// @notice SVG in bytes
+    function compileSVG(uint256 tokenId) public view returns (bytes memory) {
+        TileTrait memory trait = getTileTrait[tokenId];
+        uint256 number = 2**uint256(trait.exponent);
+        string memory svg = string.concat(
+            '<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">',
+            // tile color 
+            '<rect width="100" height="100" rx="10" ry="10" style="fill: ', 
+                trait.exponent < 12 ? TILE_COLOR[trait.exponent] : TILE_COLOR[0],
+                '"></rect>',
+            // privilege
+            trait.privileged == 0 ? '' : '<path transform="translate(38, 8)" d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" fill="#776e65"></path>',
+            // power
+            '<text x="50" y="65" font-size="36" text-anchor="middle" fill="', trait.exponent <=2 ? "#776e65" : "white" ,'">', number.toString(), '</text>',
+            // (x, y)
+            '<text x="50" y="87" font-size="15" text-anchor="middle" fill="#776e65">(', uint256(trait.x).toString(), ', ', uint256(trait.y).toString(), ')</text>',
+            '</svg>'
+        );
+        return abi.encodePacked(svg);
+    }
 
 
 
