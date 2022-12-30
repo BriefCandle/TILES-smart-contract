@@ -1,6 +1,5 @@
 pragma solidity ^0.8.13;
 import "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
-import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "lib/openzeppelin-contracts/contracts/utils/Strings.sol";
 import "lib/openzeppelin-contracts/contracts/utils/Base64.sol";
 import "./POWER.sol";
