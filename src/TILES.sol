@@ -117,12 +117,13 @@ contract TILES is ERC721 {
         x = getTileTrait[tokenId].x;
         y = getTileTrait[tokenId].y;
         getTokenIdFromXY[x][y] = 0;
-        for (uint8 i = 0; i < moves.length; i++) {
-            if (moves[i] == 0) x = moveLeft(x, y);
-            if (moves[i] == 1) x = moveRight(x, y);
-            if (moves[i] == 2) y = moveUp(x, y);
-            if (moves[i] == 3) y = moveDown(x, y);
-        }
+        // for (uint8 i = 0; i < moves.length; i++) {
+        //     if (moves[i] == 0) x = moveLeft(x, y);
+        //     if (moves[i] == 1) x = moveRight(x, y);
+        //     if (moves[i] == 2) y = moveUp(x, y);
+        //     if (moves[i] == 3) y = moveDown(x, y);
+        // }
+        (x,y) = estimateDestination(moves, x, y);
         if (getTileTrait[tokenId].privileged == 0) power.burn(msg.sender, MOVE_PRICE_ERC20 * moves.length);
         getTileTrait[tokenId].x = x;
         getTileTrait[tokenId].y = y;
@@ -131,7 +132,15 @@ contract TILES is ERC721 {
         emit Moved(tokenId, x, y, msg.sender, moves);
     }
 
-    // function estimateDestination(uint8[] calldata moves, uint256 tokenId) public view returns (uint8 x, uint8 y) {}
+    function estimateDestination(uint8[] calldata moves, uint8 x, uint8 y) public view returns (uint8, uint8) {
+        for (uint8 i = 0; i < moves.length; i++) {
+            if (moves[i] == 0) x = moveLeft(x, y);
+            if (moves[i] == 1) x = moveRight(x, y);
+            if (moves[i] == 2) y = moveUp(x, y);
+            if (moves[i] == 3) y = moveDown(x, y);
+        }
+        return (x,y);
+    }
 
     function moveLeft(uint8 x, uint8 y) internal view returns (uint8) {
         require(x != 0, "TILES: leftest");
@@ -187,6 +196,7 @@ contract TILES is ERC721 {
             getTileTrait[tokenId2].privileged == 0; 
         }
         _burn(tokenId1);
+        getTileTrait[tokenId2].timestamp = block.timestamp;
         getTileTrait[tokenId2].exponent++;
         getTokenIdFromXY[x1][y1] = 0;
         exist_amount--;
@@ -209,6 +219,8 @@ contract TILES is ERC721 {
 
         emit Claimed(tokenId, msg.sender, award);
     }
+
+    // function getClaimAmount()
 
     /*///////////////////////////////////////////////////////////////
                                TOKEN URI FUNCTION
