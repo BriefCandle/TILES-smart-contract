@@ -1,6 +1,14 @@
 ## 1. Overview
 TILES is a 2048-style crypto game. On a 16x16 grid, players can mint, move, and merge TILES with one another. The first player with a tile reaching the number 2048 (exponent #11) can take control of this project.
 
+This is an on-chain mini game developed primarily to demonstrate a decentralized NFT market protocol which
+1) uses bid-and-ask mechanism
+2) allows any ERC20 as payment method
+3) adopts a uniswap-like market factory that maps an nft contract to a unique market contract
+4) allows configuration of bidding strategies (for example, bidding on specific traits) (upcoming)
+
+- https://github.com/BriefCandle/nft-market
+
 The game consists of two smart contracts: 
 1) TILES.sol --> NFT
 2) POWER.sol --> ERC20
@@ -62,4 +70,4 @@ Complete the google form to participate: https://forms.gle/JNdnuZHU93dmMZQT8
 ## 7. Front-end
 (coming soon)
 
-Please let me know if you want to contribute: twitter @BriefKandle
+Please let me know if you want to contribute: Discord: Brief_Kandle#6146
