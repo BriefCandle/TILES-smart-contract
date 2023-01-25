@@ -26,13 +26,13 @@ contract TilesGeneralTest is Test {
     function testMintSuccess() public {
         vm.startPrank(alice, alice);
         uint balance_prev = power.balanceOf(alice);
-        uint tokenId1 = tiles.mint();
+        uint tokenId1 = tiles.mint(1);
         assertEq(power.balanceOf(alice), balance_prev - tiles.MINT_PRICE_ERC20());
         assertEq(tokenId1, 1);
         // (uint8 x1, uint8 y1, , , , ) = tiles.getTileTrait(tokenId1);
-        uint tokenId2 = tiles.mint();
+        uint tokenId2 = tiles.mint(1);
         // (uint8 x2, uint8 y2, , , , ) = tiles.getTileTrait(tokenId2);
-        uint tokenId3 = tiles.mint();
+        uint tokenId3 = tiles.mint(1);
         // (uint8 x3, uint8 y3, , , , ) = tiles.getTileTrait(tokenId3);
         // console.log('x1=', x1, '; y1=', y1);
         // console.log('x2=', x2, '; y2=', y2);

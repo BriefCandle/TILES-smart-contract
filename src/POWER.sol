@@ -13,7 +13,7 @@ contract POWER is ERC20 {
     event ControllerChanged(address controller);
 
     constructor() ERC20("Power", "POWER") {
-        _mint(msg.sender, 50 ether); // mint the initial amount to setup liquidity
+        _mint(msg.sender, 500 ether); // mint the initial amount to setup liquidity
     }
 
     /// @notice mints erc20 to a recipient

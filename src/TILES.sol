@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.13;
+
 import "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+import "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "lib/openzeppelin-contracts/contracts/utils/Strings.sol";
 import "lib/openzeppelin-contracts/contracts/utils/Base64.sol";
 import "./POWER.sol";
 
-contract TILES is ERC721 {
+contract TILES is ERC721, Ownable {
     using Strings for uint256;
 
     // ERC20 Info
@@ -14,7 +18,12 @@ contract TILES is ERC721 {
     uint256 public constant MINT_PRICE_ERC20 = 1 ether;
     uint256 public constant MOVE_PRICE_ERC20 = 0.2 ether;
     uint256 public constant MERGE_PRICE_ERC20 = 0.3 ether;
-    uint256 public constant PRIVILEGE_PRICE_ERC20 = 1 ether; // ERC20 for now, later can change it to eth or lp
+    uint256 public PRIVILEGE_PRICE_LP = 1 ether; // change it to constant
+    uint8 public constant PRIVILEGE_ACTIONS = 20; 
+    address public LP;
+
+    // Winning Info
+    uint8 public WINNING_EXPONENT = 11; // 2048 // change it to constant 
 
     // NFT Info
     uint256 public constant MAX_SUPPLY = 2**14; // 16384
@@ -23,9 +32,6 @@ contract TILES is ERC721 {
     // SVG Info
     string[12] public TILE_COLOR = ['#000000', '#EEE4DA', '#EDE0C8', '#F2B179', '#F59563', '#F67C5F', '#F65E3B', '#EDCF72', '#EDCC61', '#EDC850','#EDC53F','#EDC22E'];
 
-
-    // Winning Info
-    uint8 public constant WINNING_EXPONENT = 11; // 2048
     bool public won = false;
 
     // Tile Info
@@ -61,27 +67,29 @@ contract TILES is ERC721 {
                                MINT FUNCTION
     //////////////////////////////////////////////////////////////*/
     /// @notice Mint NFT function
-    function mint() public returns(uint256) {
-        // require(tx.origin == msg.sender, "TILES: Only EOA");
-        require(minted_amount + 1 <= MAX_SUPPLY, "TILES: all tokens minted");
-        require(exist_amount + 1 <= MAX_EXIST, "TILES: max exist");
-        minted_amount++;
-        exist_amount++;
-        uint256 seed = pseudoRandom(minted_amount);
-        (uint8 x, uint8 y) = selectXY(seed);
-        getTileTrait[minted_amount] = TileTrait({
-            x: x,
-            y: y,
-            exponent: 1,
-            privileged: 0, 
-            tokenId: minted_amount,
-            timestamp: block.timestamp
-        });
-        getTokenIdFromXY[x][y] = minted_amount;
-        _safeMint(msg.sender, minted_amount);
-        power.burn(msg.sender, MINT_PRICE_ERC20);
+    function mint(uint8 amount) public returns(uint256) {
+        require(minted_amount + amount <= MAX_SUPPLY, "TILES: all tokens minted");
+        require(exist_amount + amount <= MAX_EXIST, "TILES: max exist");
+        require(amount > 0 && amount <= 5, 'TILES: invalid mint amount');
+        for (uint i=0; i<amount; i++) {
+            minted_amount++;
+            exist_amount++;
+            uint256 seed = pseudoRandom(minted_amount);
+            (uint8 x, uint8 y) = selectXY(seed);
+            getTileTrait[minted_amount] = TileTrait({
+                x: x,
+                y: y,
+                exponent: 1,
+                privileged: 0, 
+                tokenId: minted_amount,
+                timestamp: block.timestamp
+            });
+            getTokenIdFromXY[x][y] = minted_amount;
+            _safeMint(msg.sender, minted_amount);
 
-        emit Minted(minted_amount, msg.sender, x, y);
+            emit Minted(minted_amount, msg.sender, x, y);
+        }
+        power.burn(msg.sender, MINT_PRICE_ERC20 * amount);
         return minted_amount;
     }
 
@@ -117,14 +125,11 @@ contract TILES is ERC721 {
         x = getTileTrait[tokenId].x;
         y = getTileTrait[tokenId].y;
         getTokenIdFromXY[x][y] = 0;
-        // for (uint8 i = 0; i < moves.length; i++) {
-        //     if (moves[i] == 0) x = moveLeft(x, y);
-        //     if (moves[i] == 1) x = moveRight(x, y);
-        //     if (moves[i] == 2) y = moveUp(x, y);
-        //     if (moves[i] == 3) y = moveDown(x, y);
-        // }
         (x,y) = estimateDestination(moves, x, y);
-        if (getTileTrait[tokenId].privileged == 0) power.burn(msg.sender, MOVE_PRICE_ERC20 * moves.length);
+        if (getTileTrait[tokenId].privileged < moves.length) {
+            power.burn(msg.sender, MOVE_PRICE_ERC20 * (moves.length - getTileTrait[tokenId].privileged));
+            if (getTileTrait[tokenId].privileged != 0) getTileTrait[tokenId].privileged = 0;
+        } else getTileTrait[tokenId].privileged -= uint8(moves.length);
         getTileTrait[tokenId].x = x;
         getTileTrait[tokenId].y = y;
         getTokenIdFromXY[x][y] = tokenId;
@@ -191,9 +196,11 @@ contract TILES is ERC721 {
         if (action == 1) require(x2-x1 == 1 && y1 == y2, "TILES: no adjct right");
         if (action == 2) require(y1-y2 == 1 && x1 == x2, "TILES: no adjct up");
         if (action == 3) require(y2-y1 == 1 && x1 == x2, "TILES: no adjct down");
-        if (getTileTrait[tokenId1].privileged == 0 || getTileTrait[tokenId2].privileged == 0) {
+        if (getTileTrait[tokenId1].privileged == 0 && getTileTrait[tokenId2].privileged == 0) {
             power.burn(msg.sender, MERGE_PRICE_ERC20);
             getTileTrait[tokenId2].privileged == 0; 
+        } else {
+            getTileTrait[tokenId2].privileged = (getTileTrait[tokenId1].privileged + getTileTrait[tokenId2].privileged - 1) / 2;
         }
         _burn(tokenId1);
         getTileTrait[tokenId2].timestamp = block.timestamp;
@@ -210,7 +217,7 @@ contract TILES is ERC721 {
     function claim(uint256 tokenId) public returns(uint256 award) {
         require(ownerOf(tokenId) == msg.sender, "TILES: not owner"); // implicitly requires token exist
         award = 2 ** (getTileTrait[tokenId].exponent - 1) * (block.timestamp - getTileTrait[tokenId].timestamp) * DAILY_RATE / 1 days;
-        if (getTileTrait[tokenId].privileged == 1) {
+        if (getTileTrait[tokenId].privileged != 0) {
             uint256 bonus_award = (getTileTrait[tokenId].exponent - 1) * (block.timestamp - getTileTrait[tokenId].timestamp) * BONUS_RATE / 1 days * 2 / 3; 
             award = award + bonus_award;
         }
@@ -249,7 +256,7 @@ contract TILES is ERC721 {
                 '{"trait_type": "x", "value": "', uint256(trait.x).toString(), '"},', 
                 '{"trait_type": "y", "value": "', uint256(trait.y).toString(), '"},',
                 '{"trait_type": "exponent", "value": "', uint256(trait.exponent).toString(), '"},',
-                '{"trait_type": "privileged", "value": "', trait.privileged == 0 ? 'false':'true', '"},',
+                '{"trait_type": "privileged", "value": "', uint256(trait.privileged).toString(), '"},',
                 '{"trait_type": "timestamp", "value": "', trait.timestamp.toString(), '"}',
             ']'
         );
@@ -281,14 +288,19 @@ contract TILES is ERC721 {
     /*///////////////////////////////////////////////////////////////
                                PRIVILEGE FUNCTION
     //////////////////////////////////////////////////////////////*/
-    /// @notice Award privilege to tokenId if sender has power; does not require ownerOf
+    /// @notice Award privilege to tokenId if sender has power; does not require ownerOf; require caller set approval for his lp first
     function setPrivilege(uint256 tokenId) public {
         require(getTileTrait[tokenId].privileged == 0, "TILES: already privileged");
-        // can change cost to eth, or lp
-        power.burn(msg.sender, PRIVILEGE_PRICE_ERC20 * 2 ** (getTileTrait[tokenId].exponent - 1));
-        getTileTrait[tokenId].privileged = 1;
+        // power.burn(msg.sender, PRIVILEGE_PRICE_ERC20 * 2 ** (getTileTrait[tokenId].exponent - 1));
+        require(LP != address(0), "TILES: LP not set");
+        require(IERC20(LP).transfer(address(power), PRIVILEGE_PRICE_LP * 2 * getTileTrait[tokenId].exponent), "TILES: transfer fails");
+        getTileTrait[tokenId].privileged += PRIVILEGE_ACTIONS;
 
         emit PrivilegeSet(tokenId);
+    }
+
+    function setLP(address _LP) external onlyOwner {
+        LP = _LP;
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -305,4 +317,15 @@ contract TILES is ERC721 {
         emit WinnerSet(tokenId, _controller);
     }
 
+
+    /*///////////////////////////////////////////////////////////////
+                    TO BE DELETED SETTER FUNCTION
+    //////////////////////////////////////////////////////////////*/
+    function changeWinningExponent(uint8 _winningExponent) external onlyOwner {
+        WINNING_EXPONENT = _winningExponent;
+    }
+
+    function changePrivilegePriceLP(uint256 _privilegePriceLP) external onlyOwner {
+        PRIVILEGE_PRICE_LP = _privilegePriceLP;
+    }
 }
